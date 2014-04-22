@@ -106,7 +106,7 @@ static int applyHome( ConstantSpeed_t *constantSpeed ) {
     applyConstantSpeed( constantSpeed );
 
     for( motorNumber = 0; motorNumber < NUM_MOTORS; motorNumber++ ) {
-        if( constantSpeed->steps ) {
+        if( constantSpeed->steps[motorNumber] ) {
             break;
         }
     }
