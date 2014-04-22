@@ -237,9 +237,6 @@ static void gpioInit( void ) {
     GPIO_setPullUp( myGpio, PI_EMERGENCY_STOP, GPIO_PullUp_Enable );
     GPIO_setMode( myGpio, PI_EMERGENCY_STOP, GPIO_28_Mode_GeneralPurpose );
     GPIO_setDirection( myGpio, PI_EMERGENCY_STOP, GPIO_Direction_Input );
-
-    GPIO_setPullUp(myGpio, A_STEP, GPIO_PullUp_Disable);
-    GPIO_setMode(myGpio, A_STEP, GPIO_5_Mode_EPWM3B);
 }
 
 static void spiInit( void ) {
