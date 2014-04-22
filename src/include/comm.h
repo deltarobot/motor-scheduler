@@ -26,13 +26,13 @@ struct ConstantSpeed_t {
 };
 
 struct Home_t {
-	int32_t accelerations[NUM_MOTORS];
-	int32_t speeds[NUM_MOTORS];
+    int32_t accelerations[NUM_MOTORS];
+    int32_t speeds[NUM_MOTORS];
 };
 
 struct WorkHead_t {
-	int32_t dutyCycle;
-	int32_t direction;
+    int32_t dutyCycle;
+    int32_t direction;
 };
 
 struct Command_t {

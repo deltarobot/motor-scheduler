@@ -71,9 +71,9 @@ int applyCommand( Command_t *command ) {
 }
 
 static int applyWorkHead( WorkHead_t *work ) {
-	setDirection( 3, sign( work->direction ) );
-	setWorkHead( work->dutyCycle );
-	return 1;
+    setDirection( 3, sign( work->direction ) );
+    setWorkHead( work->dutyCycle );
+    return 1;
 }
 
 static int applyAcceleration( Accelerating_t *accelerating ) {
