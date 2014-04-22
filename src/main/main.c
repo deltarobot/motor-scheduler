@@ -46,7 +46,7 @@ static void spiInit( void );
 static void interruptInit( void );
 static interrupt void updateMotorsInterrupt( void );
 static void clearMotors( void );
-static void InitEPwm1( void );
+static void pwmInit( void );
 
 #ifdef _FLASH
 FLASH_Handle myFlash;
@@ -74,7 +74,7 @@ static int shouldGetNextCommand = 1;
 
 void main( void ) {
     handleInit();
-    InitEPwm1();
+    pwmInit();
     gpioInit();
     spiInit();
     schedulerInit();
@@ -238,8 +238,8 @@ static void gpioInit( void ) {
     GPIO_setMode( myGpio, PI_EMERGENCY_STOP, GPIO_28_Mode_GeneralPurpose );
     GPIO_setDirection( myGpio, PI_EMERGENCY_STOP, GPIO_Direction_Input );
 
-    GPIO_setPullUp(myGpio, GPIO_Number_5, GPIO_PullUp_Disable);
-    GPIO_setMode(myGpio, GPIO_Number_5, GPIO_5_Mode_EPWM3B);
+    GPIO_setPullUp(myGpio, A_STEP, GPIO_PullUp_Disable);
+    GPIO_setMode(myGpio, A_STEP, GPIO_5_Mode_EPWM3B);
 }
 
 static void spiInit( void ) {
@@ -283,38 +283,36 @@ static void interruptInit( void ) {
 }
 
 // Switched from PWM1A (worked) to PWM3B (needs verification)
-static void InitEPwm1( void ) {
-    CLK_disableTbClockSync(myClk);
-    CLK_enablePwmClock(myClk, PWM_Number_3);
+static void pwmInit( void ) {
+    CLK_disableTbClockSync( myClk );
+    CLK_enablePwmClock( myClk, PWM_Number_3 );
 
     // Setup TBCLK
-    PWM_setCounterMode(myPwm3, PWM_CounterMode_Up);     // Count up
-    PWM_setPeriod(myPwm3, ePWM3Period);                 // Set timer period
-    PWM_disableCounterLoad(myPwm3);                     // Disable phase loading
-    PWM_setPhase(myPwm3, 0x0000);                       // Phase is 0
-    PWM_setCount(myPwm3, 0x0000);                       // Clear counter
-    PWM_setHighSpeedClkDiv(myPwm3, PWM_HspClkDiv_by_2); // Clock ratio to SYSCLKOUT
-    PWM_setClkDiv(myPwm3, PWM_ClkDiv_by_2);
+    PWM_setCounterMode( myPwm3, PWM_CounterMode_Up );
+    PWM_setPeriod( myPwm3, ePWM3Period );
+    PWM_disableCounterLoad( myPwm3 );
+    PWM_setPhase( myPwm3, 0x0000 );
+    PWM_setCount( myPwm3, 0x0000 );
+    PWM_setHighSpeedClkDiv( myPwm3, PWM_HspClkDiv_by_2 );
+    PWM_setClkDiv( myPwm3, PWM_ClkDiv_by_2 );
 
-    // Setup shadow register load on ZERO
-    PWM_setShadowMode_CmpA(myPwm3, PWM_ShadowMode_Shadow);
-    PWM_setShadowMode_CmpB(myPwm3, PWM_ShadowMode_Shadow);
-    PWM_setLoadMode_CmpA(myPwm3, PWM_LoadMode_Zero);
-    PWM_setLoadMode_CmpB(myPwm3, PWM_LoadMode_Zero);
+    PWM_setShadowMode_CmpA( myPwm3, PWM_ShadowMode_Shadow );
+    PWM_setShadowMode_CmpB( myPwm3, PWM_ShadowMode_Shadow );
+    PWM_setLoadMode_CmpA( myPwm3, PWM_LoadMode_Zero );
+    PWM_setLoadMode_CmpB( myPwm3, PWM_LoadMode_Zero );
 
-    // Set Compare values
-    PWM_setCmpA(myPwm3, 5000);    // Set compare A value
-    PWM_setCmpB(myPwm3, 7500);    // Set Compare B value
+    PWM_setCmpA( myPwm3, 5000 );
+    PWM_setCmpB( myPwm3, 7500 );
 
-    // Set Actions
-    PWM_setActionQual_Zero_PwmA(myPwm3, PWM_ActionQual_Set);
-    PWM_setActionQual_CntUp_CmpA_PwmA(myPwm3, PWM_ActionQual_Clear);
+    PWM_setActionQual_Zero_PwmA( myPwm3, PWM_ActionQual_Set );
+    PWM_setActionQual_CntUp_CmpA_PwmA( myPwm3, PWM_ActionQual_Clear );
 
-    PWM_setActionQual_Zero_PwmB(myPwm3, PWM_ActionQual_Set);
-    PWM_setActionQual_CntUp_CmpB_PwmB(myPwm3, PWM_ActionQual_Clear);
+    PWM_setActionQual_Zero_PwmB( myPwm3, PWM_ActionQual_Set );
+    PWM_setActionQual_CntUp_CmpB_PwmB( myPwm3, PWM_ActionQual_Clear );
 
-    CLK_enableTbClockSync(myClk); // remove for release?
+    CLK_enableTbClockSync( myClk ); // remove for release?
 }
+
 static interrupt void updateMotorsInterrupt( void ) {
     clearMotors();
     if( updateMotors() == -1 ) {
@@ -332,15 +330,15 @@ static void clearMotors( void ) {
 
 int setWorkHead( int dutyCycle ) {
     if( dutyCycle <= 0 || dutyCycle >= 100 ) {
-        CLK_disableTbClockSync(myClk);
-        GPIO_setPullUp(myGpio, A_STEP, GPIO_PullUp_Enable);
-        GPIO_setMode(myGpio, A_STEP, GPIO_5_Mode_GeneralPurpose);
+        CLK_disableTbClockSync( myClk );
+        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Enable );
+        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_GeneralPurpose );
     }
     else {
-        GPIO_setPullUp(myGpio, A_STEP, GPIO_PullUp_Disable);
-        GPIO_setMode(myGpio, A_STEP, GPIO_5_Mode_EPWM3B);
-        PWM_setCmpB(myPwm3, (dutyCycle*ePWM3Period)/100);
-        CLK_enableTbClockSync(myClk);
+        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Disable );
+        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_EPWM3B );
+        PWM_setCmpB( myPwm3, ( dutyCycle * ePWM3Period ) / 100 );
+        CLK_enableTbClockSync( myClk );
     }
     return 1;
 }
