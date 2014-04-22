@@ -7,7 +7,7 @@ static MotorMovement motorMovement[NUM_MOTORS];
 
 static int applyAcceleration( Accelerating_t *accelerating );
 static int applyConstantSpeed( ConstantSpeed_t *constantSpeed );
-static int applyHome( Home_t *home );
+static int applyHome( ConstantSpeed_t *constantSpeed );
 static int applyWorkHead( WorkHead_t *work );
 
 int schedulerInit( void ) {
@@ -64,7 +64,7 @@ int applyCommand( Command_t *command ) {
         case WorkHead:
             return applyWorkHead( &command->command.workHead );
         case Home:
-            return applyHome( &command->command.home );
+            return applyHome( &command->command.constantSpeed );
         default:
             return 0;
     }
@@ -99,24 +99,23 @@ static int applyConstantSpeed( ConstantSpeed_t *constantSpeed ) {
     return 1;
 }
 
-static int applyHome( Home_t *home ) {
-    int i;
+static int applyHome( ConstantSpeed_t *constantSpeed ) {
+    int motorNumber;
 
-    for( i = 0; i < NUM_MOTORS; i++ ) {
-        setDirection( i, sign( home->accelerations[i] ) );
-        motorMovement[i].acceleration = home->accelerations[i];
-        motorMovement[i].steps = -1;
-        while( !isHomed( i ) ) {
-            if( listenForShutdown() ) {
-                return 0;
-            }
-            if( abs( motorMovement[i].speed ) > abs( home->speeds[i] ) ) {
-                motorMovement[i].acceleration = 0;
-                motorMovement[i].speed = home->speeds[i];
-            }
+    applyConstantSpeed( constantSpeed );
+
+    for( motorNumber = 0; motorNumber < NUM_MOTORS; motorNumber++ ) {
+        if( constantSpeed->steps ) {
+            break;
         }
-        motorMovement[i].steps = 0;
     }
+
+    while( !isHomed( motorNumber ) ) {
+        if( listenForShutdown() ) {
+            return 0;
+        }
+    }
+    motorMovement[motorNumber].steps = 0;
 
     return 1;
 }

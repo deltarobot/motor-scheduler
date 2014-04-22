@@ -152,10 +152,6 @@ static void getNewCommand( void ){
             for( i = 0; i < NUM_MOTORS; i++ ) {
                 setDirection( i, sign( commandArray[i].command.accelerating.accelerations[i] ) );
             }
-        } else if( commandArray[0].commandType == Home ) {
-            for( i = 0; i < NUM_MOTORS; i++ ) {
-                setDirection( i, sign( commandArray[i].command.home.accelerations[i] ) );
-            }
         }
         commandCount  = 0;
         TIMER_enableInt( myTimer );
