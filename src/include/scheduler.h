@@ -11,7 +11,7 @@ struct MotorMovement {
 
 extern int listenForShutdown( void );
 extern int schedulerInit( void );
-extern int applyCommand( Command_t *command );
+extern int applyCommand( Command_t *command, char firstCommand );
 extern int updateMotors( void );
 extern int moveMotor( int motorNumber );
 extern int isHomed( int motorNumber );

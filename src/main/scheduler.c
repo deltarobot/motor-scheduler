@@ -5,7 +5,7 @@
 
 static MotorMovement motorMovement[NUM_MOTORS];
 
-static int applyAcceleration( Accelerating_t *accelerating );
+static int applyAcceleration( Accelerating_t *accelerating, char firstCommand );
 static int applyConstantSpeed( ConstantSpeed_t *constantSpeed );
 static int applyHome( ConstantSpeed_t *constantSpeed );
 static int applyWorkHead( WorkHead_t *work );
@@ -55,10 +55,10 @@ int updateMotors( void ) {
     return 1;
 }
 
-int applyCommand( Command_t *command ) {
+int applyCommand( Command_t *command, char firstCommand ) {
     switch( command->commandType & 0x000000FF ) {
         case Accelerating:
-            return applyAcceleration( &command->command.accelerating );
+            return applyAcceleration( &command->command.accelerating, firstCommand );
         case ConstantSpeed:
             return applyConstantSpeed( &command->command.constantSpeed );
         case WorkHead:
@@ -76,10 +76,13 @@ static int applyWorkHead( WorkHead_t *work ) {
     return 1;
 }
 
-static int applyAcceleration( Accelerating_t *accelerating ) {
+static int applyAcceleration( Accelerating_t *accelerating, char firstCommand ) {
     int i;
 
     for( i = 0; i < NUM_MOTORS; i++ ) {
+        if( firstCommand ) {
+            setDirection( i, sign( accelerating->accelerations[i] ) );
+        }
         motorMovement[i].steps = accelerating->steps[i];
         motorMovement[i].acceleration = accelerating->accelerations[i];
     }
@@ -90,11 +93,9 @@ static int applyConstantSpeed( ConstantSpeed_t *constantSpeed ) {
     int i;
 
     for( i = 0; i < NUM_MOTORS; i++ ) {
-        if( constantSpeed->steps[i] ) {
-            motorMovement[i].steps = constantSpeed->steps[i];
-            motorMovement[i].acceleration = 0;
-            motorMovement[i].speed = constantSpeed->speeds[i];
-        }
+        motorMovement[i].steps = constantSpeed->steps[i];
+        motorMovement[i].acceleration = 0;
+        motorMovement[i].speed = constantSpeed->speeds[i];
     }
     return 1;
 }

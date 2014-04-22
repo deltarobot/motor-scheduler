@@ -143,21 +143,15 @@ static uint8_t readSpi( void ) {
 
 
 static void getNewCommand( void ){
-    int i;
     commandCount++;
     if( commandCount >= numberCommands ) {
         TIMER_disableInt( myTimer );
         commandReceive();
-        if( commandArray[0].commandType == Accelerating ) {
-            for( i = 0; i < NUM_MOTORS; i++ ) {
-                setDirection( i, sign( commandArray[i].command.accelerating.accelerations[i] ) );
-            }
-        }
         commandCount  = 0;
         TIMER_enableInt( myTimer );
     }
 
-    applyCommand( &commandArray[commandCount] );
+    applyCommand( &commandArray[commandCount], commandCount == 0 );
 }
 
 static void handleInit( void ) {
