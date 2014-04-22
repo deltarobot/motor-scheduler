@@ -4,6 +4,7 @@
 #include "scheduler.h"
 
 static MotorMovement motorMovement[NUM_MOTORS];
+static char hardStop;
 
 static int applyAcceleration( Accelerating_t *accelerating, char firstCommand );
 static int applyConstantSpeed( ConstantSpeed_t *constantSpeed );
@@ -31,6 +32,8 @@ int updateMotors( void ) {
         motor = &motorMovement[i];
         if( motor->steps > 0 ) {
             getNextCommand = 0;
+        } else if( hardStop ) {
+            continue;
         }
         motor->speed += motor->acceleration;
         #ifndef x86
@@ -55,10 +58,15 @@ int updateMotors( void ) {
     return 1;
 }
 
-int applyCommand( Command_t *command, char firstCommand ) {
+int applyCommand( Command_t *command, char commandCount ) {
+    if( commandCount == 3 ) {
+        hardStop = 1;
+    } else {
+        hardStop = 0;
+    }
     switch( command->commandType & 0x000000FF ) {
         case Accelerating:
-            return applyAcceleration( &command->command.accelerating, firstCommand );
+            return applyAcceleration( &command->command.accelerating, commandCount == 0 );
         case ConstantSpeed:
             return applyConstantSpeed( &command->command.constantSpeed );
         case WorkHead:

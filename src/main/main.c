@@ -67,8 +67,8 @@ static const GPIO_Number_e motorDirections[NUM_MOTORS+NUM_WORKHEADS] = {X_DIRECT
 static const GPIO_Number_e motorHomes[NUM_MOTORS+NUM_WORKHEADS] = {X_HOME, Y_HOME, Z_HOME, A_HOME};
 
 static Command_t commandArray[3];
-static int numberCommands = 0;
-static int commandCount = 0;
+static char numberCommands = 0;
+static char commandCount = 0;
 
 static int shouldGetNextCommand = 1;
 
@@ -146,12 +146,13 @@ static void getNewCommand( void ){
     commandCount++;
     if( commandCount >= numberCommands ) {
         TIMER_disableInt( myTimer );
+        schedulerInit();
         commandReceive();
         commandCount  = 0;
         TIMER_enableInt( myTimer );
     }
 
-    applyCommand( &commandArray[commandCount], commandCount == 0 );
+    applyCommand( &commandArray[commandCount], commandCount );
 }
 
 static void handleInit( void ) {
