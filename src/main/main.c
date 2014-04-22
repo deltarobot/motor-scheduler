@@ -99,16 +99,14 @@ int listenForShutdown( void ) {
 
 static int waitSpi( void ) {
     uint8_t readData;
+
     for( ;; ) {
         while( SPI_getRxFifoStatus( mySpi ) == SPI_FifoStatus_Empty ) {}
         readData = ( SPI_read( mySpi ) & 0xFF );
-        if( readData == 0x33 ) {
+        if( readData == 0x33 || readData == 0x22 || readData == 0x11 ) {
             SPI_write8( mySpi, 0 );
-            return 3;
-        } else if ( readData == 0x11 ) {
-            SPI_write8( mySpi, 0 );
-            return 1;
-        }else {
+            return readData & 0x0F;
+        } else {
             SPI_write8( mySpi, 0xA5 );
         }
     }
