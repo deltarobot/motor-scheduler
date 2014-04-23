@@ -62,9 +62,9 @@ TIMER_Handle myTimer;
 WDOG_Handle myWDog;
 PWM_Handle myPwm3;
 
-static const GPIO_Number_e motorSteps[NUM_MOTORS+NUM_WORKHEADS] = {X_STEP, Y_STEP, Z_STEP, A_STEP};
-static const GPIO_Number_e motorDirections[NUM_MOTORS+NUM_WORKHEADS] = {X_DIRECTION, Y_DIRECTION, Z_DIRECTION, A_DIRECTION};
-static const GPIO_Number_e motorHomes[NUM_MOTORS+NUM_WORKHEADS] = {X_HOME, Y_HOME, Z_HOME, A_HOME};
+static const GPIO_Number_e motorSteps[NUM_MOTORS] = {X_STEP, Y_STEP, Z_STEP, A_STEP};
+static const GPIO_Number_e motorDirections[NUM_MOTORS] = {X_DIRECTION, Y_DIRECTION, Z_DIRECTION, A_DIRECTION};
+static const GPIO_Number_e motorHomes[NUM_MOTORS] = {X_HOME, Y_HOME, Z_HOME, A_HOME};
 
 static Command_t commandArray[3];
 static char numberCommands = 0;
@@ -310,7 +310,7 @@ static interrupt void updateMotorsInterrupt( void ) {
 static void clearMotors( void ) {
     int i;
     for( i = 0; i < NUM_MOTORS; i++ ) {
-        (( GPIO_Obj* )myGpio )->GPACLEAR = ( 1 << motorSteps[i] );
+        GPIO_setLow( myGpio, motorSteps[i] );
     }
 }
 
@@ -334,7 +334,7 @@ int moveMotor( int i ) {
     return 1;
 }
 
-int isHomed( int motorNumber ) {
+char isHomed( int motorNumber ) {
     return !GPIO_getData( myGpio, motorHomes[motorNumber] );
 }
 

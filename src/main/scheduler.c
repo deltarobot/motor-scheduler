@@ -8,7 +8,7 @@ static char hardStop;
 
 static int applyAcceleration( Accelerating_t *accelerating, char firstCommand );
 static int applyConstantSpeed( ConstantSpeed_t *constantSpeed );
-static int applyHome( ConstantSpeed_t *constantSpeed );
+static int applyHome( ConstantSpeed_t *constantSpeed, char desiredState );
 static int applyWorkHead( WorkHead_t *work );
 
 int schedulerInit( void ) {
@@ -72,14 +72,16 @@ int applyCommand( Command_t *command, char commandCount ) {
         case WorkHead:
             return applyWorkHead( &command->command.workHead );
         case Home:
-            return applyHome( &command->command.constantSpeed );
+            return applyHome( &command->command.constantSpeed, 1 );
+        case ReverseHome:
+            return applyHome( &command->command.constantSpeed, 0 );
         default:
             return 0;
     }
 }
 
 static int applyWorkHead( WorkHead_t *work ) {
-    setDirection( 3, sign( work->direction ) );
+    setDirection( NUM_MOTORS - NUM_WORK_HEADS, sign( work->direction ) );
     setWorkHead( work->dutyCycle );
     return 1;
 }
@@ -90,6 +92,7 @@ static int applyAcceleration( Accelerating_t *accelerating, char firstCommand ) 
     for( i = 0; i < NUM_MOTORS; i++ ) {
         if( firstCommand ) {
             setDirection( i, sign( accelerating->accelerations[i] ) );
+            motorMovement[i].fractionalStep = sign( accelerating->accelerations[i] ) ? INT32_MIN : INT32_MAX;
         }
         motorMovement[i].steps += accelerating->steps[i];
         motorMovement[i].acceleration = accelerating->accelerations[i];
@@ -108,7 +111,7 @@ static int applyConstantSpeed( ConstantSpeed_t *constantSpeed ) {
     return 1;
 }
 
-static int applyHome( ConstantSpeed_t *constantSpeed ) {
+static int applyHome( ConstantSpeed_t *constantSpeed, char desiredState ) {
     int motorNumber;
 
     applyConstantSpeed( constantSpeed );
@@ -119,7 +122,7 @@ static int applyHome( ConstantSpeed_t *constantSpeed ) {
         }
     }
 
-    while( !isHomed( motorNumber ) ) {
+    while( isHomed( motorNumber ) != desiredState ) {
         if( listenForShutdown() ) {
             return 0;
         }
