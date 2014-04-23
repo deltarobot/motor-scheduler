@@ -81,7 +81,7 @@ int applyCommand( Command_t *command, char commandCount ) {
 }
 
 static int applyWorkHead( WorkHead_t *work ) {
-    setDirection( NUM_MOTORS - NUM_WORK_HEADS, sign( work->direction ) );
+    setDirection( NUM_MOTORS - NUM_WORK_HEADS, work->forwardDirection );
     setWorkHead( work->dutyCycle );
     return 1;
 }
@@ -93,6 +93,9 @@ static int applyAcceleration( Accelerating_t *accelerating, char firstCommand ) 
         if( firstCommand ) {
             setDirection( i, sign( accelerating->accelerations[i] ) );
             motorMovement[i].fractionalStep = sign( accelerating->accelerations[i] ) ? INT32_MIN : INT32_MAX;
+            if( i > NUM_MOTORS - NUM_WORK_HEADS && accelerating->accelerations[i] ) {
+                setFourthStepper();
+            }
         }
         motorMovement[i].steps += accelerating->steps[i];
         motorMovement[i].acceleration = accelerating->accelerations[i];

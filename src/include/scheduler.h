@@ -16,4 +16,5 @@ extern int updateMotors( void );
 extern int moveMotor( int motorNumber );
 extern char isHomed( int motorNumber );
 extern int setDirection( int motorNumber, int forwardDirection );
-extern int setWorkHead( int dutyCycle );
+extern void setWorkHead( int dutyCycle );
+extern void setFourthStepper( void );

@@ -35,7 +35,7 @@
 #define DRIVER_ENABLE GPIO_Number_2
 #define FAULT GPIO_Number_12
 
-#define ePWM3Period 30000
+#define PWM_PERIOD 30000
 
 static void commandReceive( void );
 static uint8_t readSpi( void );
@@ -91,6 +91,7 @@ void main( void ) {
 
 int listenForShutdown( void ) {
     if( !GPIO_getData( myGpio, PI_EMERGENCY_STOP ) ) {
+        setWorkHead( 0 );
         schedulerInit();
         return 1;
     }
@@ -275,7 +276,7 @@ static void pwmInit( void ) {
 
     // Setup TBCLK
     PWM_setCounterMode( myPwm3, PWM_CounterMode_Up );
-    PWM_setPeriod( myPwm3, ePWM3Period );
+    PWM_setPeriod( myPwm3, PWM_PERIOD );
     PWM_disableCounterLoad( myPwm3 );
     PWM_setPhase( myPwm3, 0x0000 );
     PWM_setCount( myPwm3, 0x0000 );
@@ -299,6 +300,22 @@ static void pwmInit( void ) {
     CLK_enableTbClockSync( myClk ); // remove for release?
 }
 
+
+void setWorkHead( int dutyCycle ) {
+    if( dutyCycle >= 0 && dutyCycle <= 50 ) {
+        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Disable );
+        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_EPWM3B );
+        PWM_setCmpB( myPwm3, ( dutyCycle * PWM_PERIOD ) / 100 );
+        CLK_enableTbClockSync( myClk );
+    }
+}
+
+void setFourthStepper( void ) {
+    CLK_disableTbClockSync( myClk );
+    GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Enable );
+    GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_GeneralPurpose );
+}
+
 static interrupt void updateMotorsInterrupt( void ) {
     clearMotors();
     if( updateMotors() == -1 ) {
@@ -312,21 +329,6 @@ static void clearMotors( void ) {
     for( i = 0; i < NUM_MOTORS; i++ ) {
         GPIO_setLow( myGpio, motorSteps[i] );
     }
-}
-
-int setWorkHead( int dutyCycle ) {
-    if( dutyCycle <= 0 || dutyCycle >= 100 ) {
-        CLK_disableTbClockSync( myClk );
-        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Enable );
-        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_GeneralPurpose );
-    }
-    else {
-        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Disable );
-        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_EPWM3B );
-        PWM_setCmpB( myPwm3, ( dutyCycle * ePWM3Period ) / 100 );
-        CLK_enableTbClockSync( myClk );
-    }
-    return 1;
 }
 
 int moveMotor( int i ) {
