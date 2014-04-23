@@ -11,6 +11,7 @@
 #include "f2802x_common/include/spi.h"
 #include "f2802x_common/include/timer.h"
 #include "f2802x_common/include/wdog.h"
+#include "f2802x_common/include/pwm.h"
 
 #include "comm.h"
 #include "scheduler.h"
@@ -30,24 +31,22 @@
 #define Z_HOME GPIO_Number_32
 #define A_HOME GPIO_Number_33
 
+#define PI_EMERGENCY_STOP GPIO_Number_28
 #define DRIVER_ENABLE GPIO_Number_2
 #define FAULT GPIO_Number_12
 
-#define sign(x) ( x >= 0 )
+#define ePWM3Period 30000
 
-#pragma CODE_SECTION( commandReceive, "ramfuncs" );
-#pragma CODE_SECTION( readSpi, "ramfuncs" );
-#pragma CODE_SECTION( updateMotorsInterrupt, "ramfuncs" );
-
-static void listenForShutdown( void );
 static void commandReceive( void );
 static uint8_t readSpi( void );
+static void getNewCommand( void );
 static void handleInit( void );
 static void gpioInit( void );
 static void spiInit( void );
 static void interruptInit( void );
 static interrupt void updateMotorsInterrupt( void );
 static void clearMotors( void );
+static void pwmInit( void );
 
 #ifdef _FLASH
 FLASH_Handle myFlash;
@@ -61,51 +60,67 @@ PLL_Handle myPll;
 SPI_Handle mySpi;
 TIMER_Handle myTimer;
 WDOG_Handle myWDog;
+PWM_Handle myPwm3;
 
 static const GPIO_Number_e motorSteps[NUM_MOTORS+NUM_WORKHEADS] = {X_STEP, Y_STEP, Z_STEP, A_STEP};
 static const GPIO_Number_e motorDirections[NUM_MOTORS+NUM_WORKHEADS] = {X_DIRECTION, Y_DIRECTION, Z_DIRECTION, A_DIRECTION};
 static const GPIO_Number_e motorHomes[NUM_MOTORS+NUM_WORKHEADS] = {X_HOME, Y_HOME, Z_HOME, A_HOME};
 
 static Command_t commandArray[3];
-static int commandCount = 2;
+static char numberCommands = 0;
+static char commandCount = 0;
+
+static int shouldGetNextCommand = 1;
 
 void main( void ) {
     handleInit();
+    pwmInit();
     gpioInit();
     spiInit();
-    interruptInit();
     schedulerInit();
+    interruptInit();
+
     for( ;; ) {
         listenForShutdown();
+        if( shouldGetNextCommand ) {
+            getNewCommand();
+            shouldGetNextCommand = 0;
+        }
     }
 }
 
-static void listenForShutdown( void ) {
-    if( GPIO_getData( myGpio, GPIO_Number_19 ) ) {
-        // Disable motors and SHUT IT DOWN!!!
+int listenForShutdown( void ) {
+    if( !GPIO_getData( myGpio, PI_EMERGENCY_STOP ) ) {
+        schedulerInit();
+        return 1;
     }
+    return 0;
 }
 
-static void waitSpi( void ) {
+static int waitSpi( void ) {
+    uint8_t readData;
+
     for( ;; ) {
         while( SPI_getRxFifoStatus( mySpi ) == SPI_FifoStatus_Empty ) {}
-        if( ( SPI_read( mySpi ) & 0xFF ) != 0x5A ) {
-            SPI_write8( mySpi, 0xA5 );
-        } else {
+        readData = ( SPI_read( mySpi ) & 0xFF );
+        if( readData == 0x33 || readData == 0x22 || readData == 0x11 ) {
             SPI_write8( mySpi, 0 );
-            return;
+            return readData & 0x0F;
+        } else {
+            SPI_write8( mySpi, 0xA5 );
         }
     }
 }
 
 static void commandReceive( void ) {
-    int i;
+    int i, wordsToReceive;
     uint16_t *commands = ( uint16_t* ) commandArray;
 
     SPI_enable( mySpi );
 
-    waitSpi();
-    for( i = 0; i < sizeof( commandArray ); i++ ) {
+    numberCommands = waitSpi();
+    wordsToReceive = numberCommands * sizeof( Command_t );
+    for( i = 0; i < wordsToReceive; i++ ) {
         commands[i] = readSpi();
         commands[i] <<= 8;
         commands[i] |= readSpi() & 0xFF;
@@ -126,17 +141,18 @@ static uint8_t readSpi( void ) {
     return readData;
 }
 
-void getNewCommand( void ){
-    int i;
+
+static void getNewCommand( void ){
     commandCount++;
-    if( commandCount >= 3 ){
+    if( commandCount >= numberCommands ) {
+        TIMER_disableInt( myTimer );
+        schedulerInit();
         commandReceive();
-        for( i = 0; i < NUM_MOTORS; i++ ) {
-            setDirection( i, sign( commandArray[i].command.accelerating.accelerations[i] ) );
-        }
         commandCount  = 0;
+        TIMER_enableInt( myTimer );
     }
-    applyCommand( &commandArray[commandCount] );
+
+    applyCommand( &commandArray[commandCount], commandCount );
 }
 
 static void handleInit( void ) {
@@ -151,6 +167,7 @@ static void handleInit( void ) {
     mySpi  = SPI_init( ( void * )SPIA_BASE_ADDR, sizeof( SPI_Obj ) );
     myTimer= TIMER_init( ( void * )TIMER0_BASE_ADDR, sizeof( TIMER_Obj ));
     myWDog = WDOG_init( ( void * )WDOG_BASE_ADDR, sizeof( WDOG_Obj ));
+    myPwm3 = PWM_init((void *)PWM_ePWM3_BASE_ADDR, sizeof(PWM_Obj));
 
     // Perform basic system initialization
     WDOG_disable( myWDog );
@@ -164,12 +181,9 @@ static void handleInit( void ) {
     CPU_disableGlobalInts( myCpu );
     CPU_clearIntFlags( myCpu );
 
-	#ifdef _FLASH
-		memcpy( &RamfuncsRunStart, &RamfuncsLoadStart, ( size_t )&RamfuncsLoadSize );
-	#endif
-	#ifdef _DEBUG
-		PIE_setDebugIntVectorTable( myPie );
-	#endif
+    #ifdef _DEBUG
+        PIE_setDebugIntVectorTable( myPie );
+    #endif
 
     PIE_enable( myPie );
 }
@@ -186,8 +200,8 @@ static void gpioInit( void ) {
     (( GPIO_Obj* )myGpio )->AIODIR |=  (( 1 << X_DIRECTION ) | ( 1 << Y_DIRECTION ) | ( 1 << DRIVER_ENABLE ));
     DISABLE_PROTECTED_REGISTER_WRITE_MODE;
 
-    (( GPIO_Obj* )myGpio )->GPASET = ( 1 << X_STEP ) | ( 1 << Y_STEP ) | ( 1 << Z_STEP ) | ( 1 << A_STEP );
-	(( GPIO_Obj* )myGpio )->GPASET = ( 1 << Z_DIRECTION ) | ( 1 << A_DIRECTION );
+    (( GPIO_Obj* )myGpio )->GPACLEAR = ( 1 << X_STEP ) | ( 1 << Y_STEP ) | ( 1 << Z_STEP ) | ( 1 << A_STEP );
+    (( GPIO_Obj* )myGpio )->GPASET = ( 1 << Z_DIRECTION ) | ( 1 << A_DIRECTION );
     (( GPIO_Obj* )myGpio )->AIOSET = ( 1 << X_DIRECTION ) | ( 1 << Y_DIRECTION ) | ( 1 << DRIVER_ENABLE );
 /*
     ENABLE_PROTECTED_REGISTER_WRITE_MODE;
@@ -208,6 +222,10 @@ static void gpioInit( void ) {
     GPIO_setMode( myGpio, GPIO_Number_17, GPIO_17_Mode_SPISOMIA );
     GPIO_setMode( myGpio, GPIO_Number_18, GPIO_18_Mode_SPICLKA );
     GPIO_setMode( myGpio, GPIO_Number_19, GPIO_19_Mode_SPISTEA_NOT );
+
+    GPIO_setPullUp( myGpio, PI_EMERGENCY_STOP, GPIO_PullUp_Enable );
+    GPIO_setMode( myGpio, PI_EMERGENCY_STOP, GPIO_28_Mode_GeneralPurpose );
+    GPIO_setDirection( myGpio, PI_EMERGENCY_STOP, GPIO_Direction_Input );
 }
 
 static void spiInit( void ) {
@@ -250,43 +268,88 @@ static void interruptInit( void ) {
     CPU_enableDebugInt( myCpu );
 }
 
+// Switched from PWM1A (worked) to PWM3B (needs verification)
+static void pwmInit( void ) {
+    CLK_disableTbClockSync( myClk );
+    CLK_enablePwmClock( myClk, PWM_Number_3 );
+
+    // Setup TBCLK
+    PWM_setCounterMode( myPwm3, PWM_CounterMode_Up );
+    PWM_setPeriod( myPwm3, ePWM3Period );
+    PWM_disableCounterLoad( myPwm3 );
+    PWM_setPhase( myPwm3, 0x0000 );
+    PWM_setCount( myPwm3, 0x0000 );
+    PWM_setHighSpeedClkDiv( myPwm3, PWM_HspClkDiv_by_2 );
+    PWM_setClkDiv( myPwm3, PWM_ClkDiv_by_2 );
+
+    PWM_setShadowMode_CmpA( myPwm3, PWM_ShadowMode_Shadow );
+    PWM_setShadowMode_CmpB( myPwm3, PWM_ShadowMode_Shadow );
+    PWM_setLoadMode_CmpA( myPwm3, PWM_LoadMode_Zero );
+    PWM_setLoadMode_CmpB( myPwm3, PWM_LoadMode_Zero );
+
+    PWM_setCmpA( myPwm3, 5000 );
+    PWM_setCmpB( myPwm3, 7500 );
+
+    PWM_setActionQual_Zero_PwmA( myPwm3, PWM_ActionQual_Set );
+    PWM_setActionQual_CntUp_CmpA_PwmA( myPwm3, PWM_ActionQual_Clear );
+
+    PWM_setActionQual_Zero_PwmB( myPwm3, PWM_ActionQual_Set );
+    PWM_setActionQual_CntUp_CmpB_PwmB( myPwm3, PWM_ActionQual_Clear );
+
+    CLK_enableTbClockSync( myClk ); // remove for release?
+}
+
 static interrupt void updateMotorsInterrupt( void ) {
     clearMotors();
-    updateMotors();
+    if( updateMotors() == -1 ) {
+        shouldGetNextCommand = 1;
+    }
     PIE_clearInt( myPie, PIE_GroupNumber_1 );
 }
 
 static void clearMotors( void ) {
     int i;
     for( i = 0; i < NUM_MOTORS; i++ ) {
-    	(( GPIO_Obj* )myGpio )->GPACLEAR = ( 1 << motorSteps[i] );
+        (( GPIO_Obj* )myGpio )->GPACLEAR = ( 1 << motorSteps[i] );
     }
 }
 
-int moveMotor( int i ) {
-	(( GPIO_Obj* )myGpio )->GPASET = ( 1 << motorSteps[i] );
+int setWorkHead( int dutyCycle ) {
+    if( dutyCycle <= 0 || dutyCycle >= 100 ) {
+        CLK_disableTbClockSync( myClk );
+        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Enable );
+        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_GeneralPurpose );
+    }
+    else {
+        GPIO_setPullUp( myGpio, A_STEP, GPIO_PullUp_Disable );
+        GPIO_setMode( myGpio, A_STEP, GPIO_5_Mode_EPWM3B );
+        PWM_setCmpB( myPwm3, ( dutyCycle * ePWM3Period ) / 100 );
+        CLK_enableTbClockSync( myClk );
+    }
     return 1;
 }
-int checkHome( int i ){
-	if( i < 2 ){
-		return((( GPIO_Obj* )myGpio )->GPADAT & ( 1 <<  motorHomes[i] ));
-	}
-	else{
-		return((( GPIO_Obj* )myGpio )->GPBDAT & ( 1 << (motorHomes[i] - GPIO_Number_32)));
-	}
+
+int moveMotor( int i ) {
+    GPIO_setHigh( myGpio, motorSteps[i] );
+    return 1;
 }
-int setDirection( int i, int forwardDirection ) {
-    if( i < 2 ){
+
+int isHomed( int motorNumber ) {
+    return !GPIO_getData( myGpio, motorHomes[motorNumber] );
+}
+
+int setDirection( int motorNumber, int forwardDirection ) {
+    if( motorNumber < 2 ){
         if( forwardDirection ) {
-            (( GPIO_Obj* )myGpio )->AIOSET   = ( 1 << motorDirections[i] );
+            ( ( GPIO_Obj* )myGpio )->AIOSET   = ( 1 << motorDirections[motorNumber] );
         } else {
-            (( GPIO_Obj* )myGpio )->AIOCLEAR = ( 1 << motorDirections[i] );
+            ( ( GPIO_Obj* )myGpio )->AIOCLEAR = ( 1 << motorDirections[motorNumber] );
         }
     } else {
         if( forwardDirection ) {
-        	(( GPIO_Obj* )myGpio )->GPASET   = ( 1 << motorDirections[i] );
+            ( ( GPIO_Obj* )myGpio )->GPASET   = ( 1 << motorDirections[motorNumber] );
         } else {
-        	(( GPIO_Obj* )myGpio )->GPACLEAR = ( 1 << motorDirections[i] );
+            ( ( GPIO_Obj* )myGpio )->GPACLEAR = ( 1 << motorDirections[motorNumber] );
         }
     }
     return 1;
