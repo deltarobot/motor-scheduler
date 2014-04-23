@@ -102,7 +102,9 @@ static int waitSpi( void ) {
     uint8_t readData;
 
     for( ;; ) {
-        while( SPI_getRxFifoStatus( mySpi ) == SPI_FifoStatus_Empty ) {}
+        while( SPI_getRxFifoStatus( mySpi ) == SPI_FifoStatus_Empty ) {
+            listenForShutdown();
+        }
         readData = ( SPI_read( mySpi ) & 0xFF );
         if( readData == 0x33 || readData == 0x22 || readData == 0x11 ) {
             SPI_write8( mySpi, 0 );

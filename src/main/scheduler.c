@@ -93,7 +93,7 @@ static int applyAcceleration( Accelerating_t *accelerating, char firstCommand ) 
         if( firstCommand ) {
             setDirection( i, sign( accelerating->accelerations[i] ) );
             motorMovement[i].fractionalStep = sign( accelerating->accelerations[i] ) ? INT32_MIN : INT32_MAX;
-            if( i > NUM_MOTORS - NUM_WORK_HEADS && accelerating->accelerations[i] ) {
+            if( ( i >= NUM_MOTORS - NUM_WORK_HEADS ) && accelerating->accelerations[i] ) {
                 setFourthStepper();
             }
         }
